@@ -9,7 +9,7 @@ spark = SparkSession.builder \
     .getOrCreate()
 
 # Inicializa Ray en modo Spark
-ray.init(address="auto")  # Conéctate a un clúster Ray existente o inicia uno en Spark
+ray.init(address="spark://master:7077")  # Conéctate a un clúster Ray existente o inicia uno en Spark
 
 # Configuración de PPO para CartPole
 config = (
