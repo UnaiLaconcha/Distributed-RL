@@ -1,0 +1,3 @@
+# Lanzar spark
+spark-submit --master yarn --deploy-mode client --num-executors 3 prueba.py 
+
