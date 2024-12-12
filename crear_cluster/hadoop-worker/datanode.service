@@ -1,0 +1,18 @@
+[Unit]
+Description=Hadoop DataNode service
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=ec2-user
+ExecStart=/home/ec2-user/hadoop-3.3.6/bin/hdfs --daemon start datanode
+Environment="JAVA_HOME=/usr/lib/jvm/java"
+Environment="HADOOP_HOME=/home/ec2-user/hadoop-3.3.6"
+PIDFile=/tmp/hadoop-ec2-user-datanode.pid
+ExecStop=/home/ec2-user/hadoop-3.3.6/bin/hdfs --daemon stop datanode
+
+[Install]
+WantedBy=multi-user.target

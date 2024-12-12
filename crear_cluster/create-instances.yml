@@ -1,0 +1,435 @@
+---
+# ------------------------------
+#       LOCALHOST
+# -------------------------------
+
+- hosts: localhost
+  vars:
+    master_instance_type: "{{ master_instance_type | default('t3.large') }}"
+    worker_instance_type: "{{ worker_instance_type | default('t3.large') }}"
+    num_workers: "{{ num_workers | default(4) }}"
+
+  tasks:
+
+  - name: Get my public IP
+    community.general.ipify_facts:
+
+  - name: Create security group for node communication
+    amazon.aws.ec2_security_group:
+      name: hadoop-sg
+      description: sg with total access within hadoop nodes
+      region: us-east-1
+      rules:
+        - proto: all
+          group_name: hadoop-sg
+        - proto: tcp
+          cidr_ip: "{{ ipify_public_ip }}/32"
+          ports: 
+          - 22
+
+  - name: Create a security group for master communication to outside
+    amazon.aws.ec2_security_group:
+      name: hadoop-master-sg
+      description: sg with partial access to hadoop-master node
+      region: us-east-1
+      rules:
+        - proto: all
+          group_name: hadoop-master-sg
+        - proto: tcp
+          cidr_ip: "{{ ipify_public_ip }}/32"
+          ports: 
+          - 22
+
+  - name: Start hadoop master instance
+    amazon.aws.ec2_instance:
+      name: "hadoop-master"
+      key_name: "vockey"
+      instance_type: "{{ master_instance_type }}"
+      security_groups: 
+        - hadoop-sg
+        - hadoop-master-sg
+      image_id: ami-066784287e358dad1
+      region: us-east-1
+      state: running
+      tags:
+        Group: hadoop-master
+      volumes:
+      - device_name: /dev/xvda
+        ebs:
+          volume_size: 50
+          delete_on_termination: true
+    register: hadoop_master_values
+      
+  - name: Start hadoop worker instances
+    amazon.aws.ec2_instance:
+      name: "hadoop-worker-{{item}}"
+      key_name: "vockey"
+      instance_type: "{{ worker_instance_type }}"
+      security_group: hadoop-sg
+      image_id: ami-066784287e358dad1
+      region: us-east-1
+      state: running
+      tags:
+        Group: hadoop-worker
+      volumes:
+      - device_name: /dev/xvda
+        ebs:
+          volume_size: 50
+          delete_on_termination: true
+    loop: "{{ range(1, num_workers|int + 1)|list }}"
+    register: hadoop_worker_values
+
+  - meta: refresh_inventory
+
+  - name: Copy hosts.template to hosts file
+    copy: 
+      src: hosts.template
+      dest: hosts
+
+  - name: Copy hosts.template to hosts file
+    copy: 
+      src: hadoop-worker/slaves.template
+      dest: slaves
+
+  # - name: Copy spark-env.sh.template to spark-env.sh file
+  #   copy: 
+  #     src: hadoop-master/spark-env.sh.template
+  #     dest: spark-env.sh
+
+  # - name: Replace master host IP at hosts file
+  #   replace:
+  #     path: spark-env.sh
+  #     regexp: 'IP-MASTER'
+  #     replace: "{{ hadoop_master_values.instances[0].private_ip_address }}"
+
+  - name: Replace master host IP at hosts file
+    replace:
+      path: hosts
+      regexp: 'master-node-ip'
+      replace: "{{ hadoop_master_values.instances[0].private_ip_address }}"
+  
+  - name: Debug hadoop_worker_values
+    debug:
+      msg: "{{ item.instances[0].private_ip_address }}"
+    loop: "{{ hadoop_worker_values.results }}"
+
+  - name: Replace workers host IP at hosts file
+    replace:
+      path: hosts
+      regexp: 'worker-{{ index }}-ip'
+      replace: "{{ item.instances[0].private_ip_address }}"
+    loop: "{{ hadoop_worker_values.results }}"
+    loop_control:
+        index_var: index
+      
+# ------------------------------
+#       ALLL
+# -------------------------------
+
+- hosts: all
+
+  tasks:
+  - name: Copy hosts file to all hosts
+    become: true
+    copy:
+      src: hosts
+      dest: /etc/hosts
+
+- hosts: all
+  tasks:
+
+  - name: Copy requirements for python enviroment
+    become: true
+    copy:
+      src: requirements_rllib.txt
+      dest: /home/ec2-user/requirements_rllib.txt
+
+  - name: Download Hadoop
+    ansible.builtin.get_url:
+      url: https://dlcdn.apache.org/hadoop/common/hadoop-3.3.6/hadoop-3.3.6.tar.gz
+      dest: /home/ec2-user
+      timeout: 60
+
+  - name: Extract Hadoop
+    ansible.builtin.command: tar -xf /home/ec2-user/hadoop-3.3.6.tar.gz
+
+  - name: Install Java
+    ansible.builtin.command: sudo yum install -y java-1.8.0-amazon-corretto java-1.8.0-amazon-corretto-devel
+
+  - name: Set JAVA_HOME environment variable at ~/.bashrc
+    ansible.builtin.shell: echo 'export JAVA_HOME=/usr/lib/jvm/java' >> ~/.bashrc
+
+  - name: Set HADOOP_HOME environment variable at ~/.bashrc
+    ansible.builtin.shell: echo 'export HADOOP_HOME=/home/ec2-user/hadoop-3.3.6' >> ~/.bashrc
+
+  - name: Set Hadoop bin directory to the PATH.
+    ansible.builtin.shell: echo 'export PATH=/home/ec2-user/hadoop-3.3.6/bin:$PATH' >> ~/.bashrc
+
+  - name: Copy core-site.xml file to all hosts
+    ansible.builtin.copy:
+      src: core-site.xml
+      dest: /home/ec2-user/hadoop-3.3.6/etc/hadoop/core-site.xml
+
+  - name: Download Spark
+    ansible.builtin.get_url:
+      url: https://dlcdn.apache.org/spark/spark-3.5.3/spark-3.5.3-bin-hadoop3.tgz
+      dest: /home/ec2-user
+      timeout: 60
+
+  - name: Extract Spark
+    ansible.builtin.command: tar -xf /home/ec2-user/spark-3.5.3-bin-hadoop3.tgz
+
+  - name: Set SPARK_HOME environment variable at ~/.bashrc
+    ansible.builtin.shell: echo 'export SPARK_HOME=/home/ec2-user/spark-3.5.3-bin-hadoop3' >> ~/.bashrc
+
+  - name: Set HADOOP_CONF_DIR environment variable at ~/.bashrc
+    ansible.builtin.shell: echo 'export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop' >> ~/.bashrc
+
+  - name: Set SPARK_HOME environment variable at ~/.bashrc
+    ansible.builtin.shell: echo 'export CLASSPATH=$(hadoop classpath):$CLASSPATH' >> ~/.bashrc
+
+  - name: Set Spark bin directory to the PATH.
+    ansible.builtin.shell: echo 'export PATH=/home/ec2-user/spark-3.5.3-bin-hadoop3/bin:$PATH' >> ~/.bashrc  
+
+  - name: Copy hosts file to all hosts
+    become: true
+    copy:
+      src: slaves
+      dest: /home/ec2-user/spark-3.5.3-bin-hadoop3/conf/slaves
+
+  # - name: Create python env 
+  #   ansible.builtin.shell: python3 -m venv /home/ec2-user/.env
+
+  # - name: Activate env
+  #   ansible.builtin.shell: source /home/ec2-user/.env/bin/activate
+
+  # - name: Install dependencies
+  #   ansible.builtin.shell: pip install -r  /home/ec2-user/requirements_rllib.txt
+
+
+- hosts: all
+  become: yes  # Ejecuta las tareas con privilegios de superusuario
+  tasks:
+
+    - name: Instalar pip para Python 3
+      command:
+        cmd: python3 -m ensurepip --upgrade
+
+    - name: Actualizar pip (opcional, pero recomendado)
+      command:
+        cmd: python3 -m pip install --upgrade pip
+
+    - name: Install dependencies
+      ansible.builtin.shell: pip install -r /home/ec2-user/requirements_rllib.txt
+
+# ------------------------------
+#       MASTER
+# -------------------------------
+
+- hosts: tag_Group_hadoop_master
+  tasks:
+  - name: copy hdfs-site.xml file to hadoop-master
+    ansible.builtin.copy:
+      src: hadoop-master/hdfs-site.xml
+      dest: /home/ec2-user/hadoop-3.3.6/etc/hadoop/hdfs-site.xml
+
+  - name: copy yarn-site.xml file to hadoop-master
+    ansible.builtin.copy:
+      src: hadoop-master/yarn-site.xml
+      dest: /home/ec2-user/hadoop-3.3.6/etc/hadoop/yarn-site.xml
+
+  - name: Copy workers file to hadoop-master
+    ansible.builtin.copy:
+      src: hadoop-master/workers
+      dest: /home/ec2-user/hadoop-3.3.6/etc/hadoop/workers
+
+  - name: Create NameNode metadata path
+    ansible.builtin.file:
+      path: /home/ec2-user/nn
+      state: directory
+
+  - name: Format the NameNode directory
+    ansible.builtin.shell: /home/ec2-user/hadoop-3.3.6/bin/hdfs namenode -format -force
+
+  - name: Copy namenode.service file to hadoop-master
+    become: true
+    ansible.builtin.copy:
+      src: hadoop-master/namenode.service
+      dest: /etc/systemd/system/namenode.service
+
+  - name: Start NameNode
+    become: true
+    ansible.builtin.shell: systemctl start namenode
+
+  - name: Set the service to start at init
+    become: true
+    ansible.builtin.shell: systemctl enable namenode
+
+  - name: copy yarn-site.xml file to hadoop-master node
+    ansible.builtin.copy:
+      src: hadoop-master/yarn-site.xml
+      dest: /home/ec2-user/hadoop-3.3.6/etc/hadoop/yarn-site.xml
+
+  # CONFIGURACION DE RESOURCEMANAGER EN MASTER
+
+  # - name: Copy resourcemanager.service file to hadoop-master
+  #   become: true
+  #   ansible.builtin.copy:
+  #     src: hadoop-master/resourcemanager.service
+  #     dest: /etc/systemd/system/resourcemanager.service
+
+  # --------------------- OTRAS CONFIGURACIONES ---------------------------------
+
+  - name: copy mapred-site.xml file to hadoop-master node
+    ansible.builtin.copy:
+      src: hadoop-master/mapred-site.xml
+      dest: /home/ec2-user/hadoop-3.3.6/etc/hadoop/mapred-site.xml
+
+  - name: Set HADOOP_CLASSPATH environment variable at ~/.bashrc
+    ansible.builtin.shell: echo 'export HADOOP_CLASSPATH=$JAVA_HOME/lib/tools.jar' >> ~/.bashrc
+
+  # INICIAR YARN EN MASTER 
+
+  # - name: Start ResourceManager
+  #   become: true
+  #   systemd:
+  #     state: started
+  #     name: resourcemanager
+  #     daemon_reload: true
+  #     enabled: true
+
+  # CONFIGURACION DE SPARK EN MASTER
+
+  - name: Copy sparkmaster.service file to hadoop-master
+    become: true
+    ansible.builtin.copy:
+      src: hadoop-master/sparkmaster.service
+      dest: /etc/systemd/system/sparkmaster.service
+
+  - name: copy hdfs-site.xml file to hadoop-master
+    ansible.builtin.copy:
+      src: hadoop-master/hdfs-site.xml
+      dest: /home/ec2-user/spark-3.5.3-bin-hadoop3/conf/hdfs-site.xml
+
+
+  # INICIAR SPARK EN MASTER
+
+  - name: Start sparkmaster
+    become: true
+    systemd:
+      state: started
+      name: sparkmaster
+      daemon_reload: true
+      enabled: true
+
+
+# -------------------------------
+#           WORKERS
+# -------------------------------
+
+- hosts: tag_Group_hadoop_worker
+
+  tasks:
+
+  - name: Copy hosts file to all hosts
+    become: true
+    copy:
+      src: hadoop-master/spark-env.sh
+      dest: /home/ec2-user/spark-3.5.3-bin-hadoop3/conf/spark-env.sh
+
+  - name: Get master IP from hosts file
+    shell: grep hadoop-master /etc/hosts | awk '{print $1}'
+    register: master_ip_result
+
+  # Configurar HDFS
+
+  - name: copy hdfs-site.xml file to hadoop-worker nodes
+    ansible.builtin.copy:
+      src: hadoop-worker/hdfs-site.xml
+      dest: /home/ec2-user/hadoop-3.3.6/etc/hadoop/hdfs-site.xml
+
+  - name: copy hdfs-site.xml file to hadoop-worker nodes
+    ansible.builtin.copy:
+      src: hadoop-worker/hdfs-site.xml
+      dest: /home/ec2-user/spark-3.5.3-bin-hadoop3/conf/hdfs-site.xml
+
+  - name: Create DataNode directory
+    ansible.builtin.file:
+      path: /home/ec2-user/dn
+      state: directory
+
+  - name: Copy datanode.service file to hadoop-worker
+    become: true
+    ansible.builtin.copy:
+      src: hadoop-worker/datanode.service
+      dest: /etc/systemd/system/datanode.service
+
+  - name: Start DataNode
+    become: true
+    ansible.builtin.shell: systemctl start datanode
+
+  - name: Set the service to start at init
+    become: true
+    ansible.builtin.shell: systemctl enable datanode
+
+  - name: copy yarn-site.xml file to hadoop-worker node
+    ansible.builtin.copy:
+      src: hadoop-worker/yarn-site.xml
+      dest: /home/ec2-user/hadoop-3.3.6/etc/hadoop/yarn-site.xml
+
+  # INCIA SPARK
+
+  - name: Add SPARK_MASTER_URL to .bashrc in worker nodes
+    lineinfile:
+      path: /home/ec2-user/.bashrc
+      line: "export SPARK_MASTER_URL=spark://hadoop-master:7077"
+      state: present
+
+  - name: Copy sparkworkker.service file to hadoop-master
+    become: true
+    ansible.builtin.copy:
+      src: hadoop-worker/sparkworker.service
+      dest: /etc/systemd/system/sparkworker.service
+
+  - name: Start spark worker
+    become: true
+    systemd:
+      state: started
+      name: sparkworker
+      daemon_reload: true
+      enabled: true
+
+  # INICIA YARN
+
+  # - name: Copy nodemanager.service file to hadoop-master
+  #   become: true
+  #   ansible.builtin.copy:
+  #     src: hadoop-worker/nodemanager.service
+  #     dest: /etc/systemd/system/nodemanager.service
+
+  # - name: Start NodeManager
+  #   become: true
+  #   systemd:
+  #     state: started
+  #     name: nodemanager
+  #     daemon_reload: true
+  #     enabled: true
+
+# REMOVER PERMISOS DE SSH 
+
+- hosts: localhost
+  tasks:
+  - name: Update security group for removing ssh access to workers
+    amazon.aws.ec2_security_group:
+      name: hadoop-sg
+      description: sg with total access within hadoop nodes
+      region: us-east-1
+      rules:
+        - proto: all
+          group_name: hadoop-sg
+
+  # - name: Associate new elastic IP with the master instance
+  #   amazon.aws.ec2_eip:
+  #     device_id: "{{ item }}"
+  #     region: us-east-1
+  #   loop: "{{ hadoop_master_values.instance_ids }}"

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+SPARK_DIST_CLASSPATH=$(hadoop classpath)
+
+SPARK_MASTER_HOST=172.31.1.247
+SPARK_WORKER_MEMORY=7g
+SPARK_WORKER_CORES=2
+SPARK_WORKER_DIR=/tmp/spark
+SPARK_LOG_DIR=/var/log/spark
+SPARK_LOCAL_DIRS=/tmp/spark
+

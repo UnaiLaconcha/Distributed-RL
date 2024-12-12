@@ -1,0 +1,18 @@
+[Unit]
+Description=Hadoop Resourcemanager service
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=ec2-user
+ExecStart=/home/ec2-user/hadoop-3.3.6/bin/yarn --daemon start resourcemanager
+Environment="JAVA_HOME=/usr/lib/jvm/java"
+Environment="HADOOP_HOME=/home/ec2-user/hadoop-3.3.6"
+PIDFile=/tmp/hadoop-ec2-user-resourcemanager.pid
+ExecStop=/home/ec2-user/hadoop-3.3.6/bin/yarn --daemon stop resourcemanager
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=Spark Master
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+User=ec2-user
+ExecStart=/home/ec2-user/spark-3.5.3-bin-hadoop3/bin/spark-class org.apache.spark.deploy.master.Master --host hadoop-master --port 7077 --webui-port 8080
+ExecStop=/home/ec2-user/spark-3.5.3-bin-hadoop3/sbin/stop-master.sh
+Restart=always
+Environment="JAVA_HOME=/usr/lib/jvm/java"
+Environment="HADOOP_HOME=/home/ec2-user/hadoop-3.3.6"
+
+
+[Install]
+WantedBy=multi-user.target
