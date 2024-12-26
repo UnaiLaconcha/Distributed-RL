@@ -6,3 +6,4 @@ worker-3-ip     hadoop-worker-4
 worker-4-ip     hadoop-worker-5
 worker-5-ip     hadoop-worker-6
 worker-6-ip     hadoop-worker-7
+worker-7-ip     hadoop-worker-8

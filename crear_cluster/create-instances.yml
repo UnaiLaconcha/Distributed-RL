@@ -60,6 +60,8 @@
           delete_on_termination: true
     register: hadoop_master_values
       
+
+    
   - name: Start hadoop worker instances
     amazon.aws.ec2_instance:
       name: "hadoop-worker-{{item}}"
@@ -156,6 +158,9 @@
   - name: Install Java
     ansible.builtin.command: sudo yum install -y java-1.8.0-amazon-corretto java-1.8.0-amazon-corretto-devel
 
+  - name: Install git
+    ansible.builtin.command: sudo yum install -y git-all
+
   - name: Set JAVA_HOME environment variable at ~/.bashrc
     ansible.builtin.shell: echo 'export JAVA_HOME=/usr/lib/jvm/java' >> ~/.bashrc
 
@@ -211,14 +216,46 @@
   become: yes  # Ejecuta las tareas con privilegios de superusuario
   tasks:
 
-    - name: Instalar pip para Python 3
-      command:
-        cmd: python3 -m ensurepip --upgrade
+    - name: Install python 3.10 
+      ansible.builtin.shell: sudo yum groupinstall "Development Tools" -y
+    
+    - name: Update apt libraries python 3.10
+      ansible.builtin.shell: sudo yum install gcc openssl-devel bzip2-devel libffi-devel zlib-devel wget tar zip -y 
 
-    - name: Actualizar pip (opcional, pero recomendado)
-      command:
-        cmd: python3 -m pip install --upgrade pip
+    - name: Download Python 3.10
+      ansible.builtin.get_url:
+        url: https://www.python.org/ftp/python/3.10.13/Python-3.10.13.tgz
+        dest: /home/ec2-user/
+        timeout: 60
 
+    - name: extraer paquetes
+      ansible.builtin.command: tar -xf /home/ec2-user/Python-3.10.13.tgz
+
+    - name: Configuracion de python
+      ansible.builtin.command: 
+        cmd: "sudo ./configure --enable-optimizations"
+        chdir: "/home/ec2-user/Python-3.10.13"
+
+    - name: Compilar
+      ansible.builtin.command: 
+        cmd: sudo make altinstall
+        chdir: "/home/ec2-user/Python-3.10.13"
+
+    - name: Configurar pip 
+      ansible.builtin.command: python3.10 -m ensurepip --upgrade
+    
+    - name: Actualizar pip
+      ansible.builtin.command: python3.10 -m pip install --upgrade pip
+    
+    - name: Agregar python al bashrc
+      ansible.builtin.shell: echo 'alias python3="python3.10"' >> ~/.bashrc
+    
+    - name: Agregar python a spark
+      ansible.builtin.shell: echo 'export PYSPARK_PYTHON=/home/ec2-user/Python-3.10.13/python' >> ~/.bashrc
+      
+    - name: Agregar librerías de python a spark
+      ansible.builtin.shell: echo 'export PYSPARK_DRIVER_PYTHON=/home/ec2-user/Python-3.10.13/python' >> ~/.bashrc
+    
     - name: Install dependencies
       ansible.builtin.shell: pip install -r /home/ec2-user/requirements_rllib.txt
 

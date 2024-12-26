@@ -1,8 +1,9 @@
-172.31.0.94  hadoop-master
-172.31.15.176     hadoop-worker-1
-172.31.0.4     hadoop-worker-2
-172.31.6.146     hadoop-worker-3
-172.31.8.153     hadoop-worker-4
-172.31.13.191     hadoop-worker-5
-172.31.0.137     hadoop-worker-6
-172.31.15.133     hadoop-worker-7
+172.31.9.228  hadoop-master
+172.31.3.250     hadoop-worker-1
+172.31.1.167     hadoop-worker-2
+172.31.4.47     hadoop-worker-3
+172.31.14.207     hadoop-worker-4
+172.31.14.178     hadoop-worker-5
+172.31.6.233     hadoop-worker-6
+172.31.4.121     hadoop-worker-7
+172.31.10.135     hadoop-worker-8

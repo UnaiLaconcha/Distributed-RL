@@ -57,5 +57,16 @@ ansible-playbook -i inventory.aws_ec2.yml --key-file=~/.ssh/vockey.pem --user ec
     -e "worker_instance_type=${worker_instance_type}" \
     -e "num_workers=${num_workers}"
 
+# Actualizar el archivo /etc/hosts
+if [ -f "hosts" ]; then
+    echo "Actualizando /etc/hosts con los valores del archivo hosts..."
+    sudo cp /etc/hosts /etc/hosts.bak  # Crear una copia de seguridad
+    sudo awk 'NR==FNR{a[$2]=$1; next} {if ($2 in a) $1=a[$2]; print}' hosts /etc/hosts > /etc/hosts.temp
+    sudo mv /etc/hosts.temp /etc/hosts
+    echo "/etc/hosts ha sido actualizado."
+else
+    echo "No se encontró el archivo 'hosts'. Por favor, asegúrate de que esté presente."
+fi
+
 # Desactivar el entorno virtual
 deactivate
