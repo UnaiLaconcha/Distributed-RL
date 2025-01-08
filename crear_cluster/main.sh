@@ -4,6 +4,9 @@
 read -p "Ingrese el tipo de instancia para el master (por defecto t3.large): " master_instance_type
 master_instance_type=${master_instance_type:-t3.large}
 
+read -p "Ingrese el tipo de instancia para el cliente (por defecto t3.large): " client_instance_type
+client_instance_type=${client_instance_type:-t3.large}
+
 read -p "Ingrese el tipo de instancia para los workers (por defecto t3.large): " worker_instance_type
 worker_instance_type=${worker_instance_type:-t3.large}
 
@@ -55,18 +58,8 @@ echo "hadoop-master/workers file has been updated with $num_workers worker nodes
 ansible-playbook -i inventory.aws_ec2.yml --key-file=~/.ssh/vockey.pem --user ec2-user create-instances.yml \
     -e "master_instance_type=${master_instance_type}" \
     -e "worker_instance_type=${worker_instance_type}" \
+    -e "client_instance_type=${client_instance_type}" \
     -e "num_workers=${num_workers}"
-
-# Actualizar el archivo /etc/hosts
-if [ -f "hosts" ]; then
-    echo "Actualizando /etc/hosts con los valores del archivo hosts..."
-    sudo cp /etc/hosts /etc/hosts.bak  # Crear una copia de seguridad
-    sudo awk 'NR==FNR{a[$2]=$1; next} {if ($2 in a) $1=a[$2]; print}' hosts /etc/hosts > /etc/hosts.temp
-    sudo mv /etc/hosts.temp /etc/hosts
-    echo "/etc/hosts ha sido actualizado."
-else
-    echo "No se encontró el archivo 'hosts'. Por favor, asegúrate de que esté presente."
-fi
 
 # Desactivar el entorno virtual
 deactivate
